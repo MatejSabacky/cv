@@ -1,0 +1,498 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>Playwright Results Parser</title>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: system-ui, sans-serif; background: #f8fafc; color: #1e293b; padding: 24px 16px; }
+.wrap { max-width: 1020px; margin: 0 auto; }
+h1 { font-size: 20px; font-weight: 700; }
+h2 { font-size: 14px; font-weight: 700; margin-bottom: 10px; }
+.sub { font-size: 13px; color: #64748b; margin-top: 4px; }
+code { background: #f1f5f9; padding: 1px 5px; border-radius: 4px; font-size: 12px; }
+button { cursor: pointer; font-weight: 600; border: none; border-radius: 8px; }
+.error { margin-top: 8px; padding: 10px 14px; background: #fee2e2; border: 1px solid #fca5a5; border-radius: 8px; font-size: 13px; color: #991b1b; }
+.tabs { display: flex; gap: 4px; margin-top: 20px; border-bottom: 2px solid #e2e8f0; }
+.tab { padding: 8px 18px; font-size: 13px; font-weight: 600; border-radius: 8px 8px 0 0; border: 1.5px solid transparent; background: none; color: #64748b; cursor: pointer; margin-bottom: -2px; }
+.tab.active { background: #fff; border-color: #e2e8f0 #e2e8f0 #fff; color: #1e293b; }
+.tab-panel { display: none; padding: 18px 0 0; }
+.tab-panel.active { display: block; }
+textarea.paste-input { width: 100%; height: 160px; padding: 12px; font-family: monospace; font-size: 12px; border: 1.5px solid #cbd5e1; border-radius: 8px; resize: vertical; background: #f8fafc; outline: none; }
+.field-row { display: flex; flex-direction: column; gap: 5px; margin-bottom: 12px; }
+.field-row label { font-size: 12px; font-weight: 600; color: #475569; }
+.field-row input { padding: 8px 12px; font-size: 13px; border: 1.5px solid #cbd5e1; border-radius: 8px; outline: none; background: #f8fafc; }
+.btn-primary { padding: 9px 20px; background: #3b82f6; color: #fff; font-size: 14px; }
+.btn-primary:disabled { background: #94a3b8; cursor: not-allowed; }
+.progress { margin-top: 10px; font-size: 13px; color: #6366f1; min-height: 20px; }
+.results { margin-top: 24px; }
+.summary { display: flex; gap: 10px; margin-bottom: 16px; flex-wrap: wrap; }
+.stat { padding: 10px 16px; background: #fff; border: 1.5px solid #e2e8f0; border-radius: 8px; min-width: 90px; }
+.stat-val { font-size: 22px; font-weight: 700; }
+.stat-label { font-size: 12px; color: #64748b; }
+.controls { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; flex-wrap: wrap; gap: 8px; }
+.filters { display: flex; gap: 6px; flex-wrap: wrap; }
+.filter-btn { padding: 5px 12px; font-size: 12px; border-radius: 6px; border: 1.5px solid #cbd5e1; background: #fff; color: #475569; font-weight: 400; }
+.filter-btn.active { border-color: #3b82f6; background: #eff6ff; color: #1d4ed8; font-weight: 600; }
+.table-wrap { overflow-x: auto; border: 1.5px solid #e2e8f0; border-radius: 8px; }
+table { width: 100%; border-collapse: collapse; font-size: 12px; }
+thead tr { background: #f1f5f9; }
+th { padding: 8px 12px; text-align: left; font-weight: 600; color: #475569; border-bottom: 1.5px solid #e2e8f0; white-space: nowrap; }
+td { padding: 7px 12px; border-bottom: 1px solid #f1f5f9; }
+tr:nth-child(even) td { background: #f8fafc; }
+.badge { padding: 2px 8px; border-radius: 999px; font-size: 11px; font-weight: 600; }
+.badge-failed   { background: #fee2e2; color: #991b1b; }
+.badge-flaky    { background: #fef9c3; color: #854d0e; }
+.badge-timedOut { background: #ffe4e6; color: #9f1239; }
+.muted   { color: #64748b; }
+.env-tag { font-weight: 600; font-size: 11px; color: #6366f1; white-space: nowrap; }
+.hidden  { display: none; }
+.slow-section { margin-top: 28px; }
+.tsv-section { margin-top: 20px; }
+.tsv-section p { font-size: 12px; color: #64748b; margin-bottom: 6px; }
+.tsv-section textarea { width: 100%; height: 130px; padding: 10px; font-family: monospace; font-size: 11px; border: 1.5px solid #cbd5e1; border-radius: 8px; background: #f8fafc; resize: vertical; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Playwright Results Parser</h1>
+  <p class="sub">Parse <code>results.json</code> from Playwright CI runs into Excel-ready TSV.</p>
+
+  <div class="tabs">
+    <button class="tab active" data-tab="paste">Paste JSON</button>
+    <button class="tab" data-tab="gitlab">Fetch from GitLab</button>
+  </div>
+
+  <div class="tab-panel active" id="tab-paste">
+    <textarea class="paste-input" id="pasteInput" placeholder="Paste contents of results.json here..."></textarea>
+    <div id="pasteError" class="error hidden"></div>
+    <br/>
+    <button class="btn-primary" id="parseBtn" disabled>Parse</button>
+  </div>
+
+  <div class="tab-panel" id="tab-gitlab">
+    <div class="field-row">
+      <label>Pipeline URL</label>
+      <input type="text" id="pipelineUrl" placeholder="https://gitlab.com/your-group/your-project/-/pipelines/12345"/>
+    </div>
+    <div class="field-row">
+      <label>Personal Access Token (read_api scope)</label>
+      <input type="password" id="glToken" placeholder="glpat-xxxxxxxxxxxxxxxxxxxx"/>
+    </div>
+    <div class="field-row">
+      <label>Job name filter (optional, e.g. "test")</label>
+      <input type="text" id="jobFilter" placeholder="test"/>
+    </div>
+    <button class="btn-primary" id="fetchBtn">Fetch &amp; Parse</button>
+    <div id="progress" class="progress"></div>
+    <div id="fetchError" class="error hidden"></div>
+  </div>
+
+  <div id="results" class="results hidden">
+    <div class="summary" id="summary"></div>
+    <div class="controls">
+      <div class="filters" id="filters"></div>
+    </div>
+    <div class="table-wrap">
+      <table>
+        <thead><tr>
+          <th>Date</th><th>Env</th><th>File</th><th>Test Name</th>
+          <th>Status</th><th>Retries</th><th>Duration</th><th>Error</th>
+        </tr></thead>
+        <tbody id="tbody"></tbody>
+      </table>
+    </div>
+    <div id="slowSection" class="slow-section hidden"></div>
+    <div class="tsv-section">
+      <p>Select all (Ctrl+A) and copy (Ctrl+C), then paste into Excel.</p>
+      <textarea id="tsvOut" readonly></textarea>
+    </div>
+  </div>
+</div>
+
+<script>
+(function() {
+  "use strict";
+
+  var allRows = [];
+  var slowRows = [];
+  var parsedStats = {};
+  var activeFilter = "all";
+
+  // ── tabs ───────────────────────────────────────────────────────────────────
+  var tabs = document.querySelectorAll(".tab");
+  for (var ti = 0; ti < tabs.length; ti++) {
+    tabs[ti].addEventListener("click", function(e) {
+      var key = e.currentTarget.dataset.tab;
+      for (var i = 0; i < tabs.length; i++) tabs[i].classList.remove("active");
+      e.currentTarget.classList.add("active");
+      var panels = document.querySelectorAll(".tab-panel");
+      for (var i = 0; i < panels.length; i++) panels[i].classList.remove("active");
+      document.getElementById("tab-" + key).classList.add("active");
+    });
+  }
+
+  // ── paste tab ──────────────────────────────────────────────────────────────
+  var pasteInput = document.getElementById("pasteInput");
+  var parseBtn   = document.getElementById("parseBtn");
+  var pasteError = document.getElementById("pasteError");
+
+  pasteInput.addEventListener("input", function() {
+    parseBtn.disabled = !pasteInput.value.trim();
+  });
+
+  parseBtn.addEventListener("click", function() {
+    pasteError.classList.add("hidden");
+    var json;
+    try { json = JSON.parse(pasteInput.value.trim()); }
+    catch(e) { showErr(pasteError, "Invalid JSON: " + e.message); return; }
+    // paste mode: no stage info available → env will be "—" for all rows
+    runParse([{ json: json, stage: null }]);
+  });
+
+  // ── gitlab tab ─────────────────────────────────────────────────────────────
+  var fetchBtn   = document.getElementById("fetchBtn");
+  var progressEl = document.getElementById("progress");
+  var fetchError = document.getElementById("fetchError");
+
+  fetchBtn.addEventListener("click", function() {
+    fetchError.classList.add("hidden");
+    progressEl.textContent = "";
+
+    var pipelineUrl = document.getElementById("pipelineUrl").value.trim();
+    var token       = document.getElementById("glToken").value.trim();
+    var jobFilter   = document.getElementById("jobFilter").value.trim().toLowerCase();
+
+    if (!pipelineUrl || !token) {
+      showErr(fetchError, "Please enter both pipeline URL and token.");
+      return;
+    }
+
+    var m = pipelineUrl.match(/^(https?:\/\/[^\/]+)\/(.+?)\/-\/pipelines\/(\d+)/);
+    if (!m) {
+      showErr(fetchError, "Cannot parse URL. Expected: https://gitlab.host/group/project/-/pipelines/ID");
+      return;
+    }
+
+    var host       = m[1];
+    var projectEnc = encodeURIComponent(m[2]);
+    var pipelineId = m[3];
+
+    fetchBtn.disabled = true;
+    setProgress("Fetching job list...");
+
+    var jobsUrl = host + "/api/v4/projects/" + projectEnc + "/pipelines/" + pipelineId + "/jobs?per_page=100";
+    apiFetch(jobsUrl, token, function(err, jobs) {
+      if (err) {
+        fetchBtn.disabled = false;
+        showErr(fetchError, "Failed to fetch jobs: " + err);
+        return;
+      }
+      var filtered = [];
+      for (var i = 0; i < jobs.length; i++) {
+        var j = jobs[i];
+        var skip = (j.status === "created" || j.status === "pending" || j.status === "skipped");
+        var match = !jobFilter || j.name.toLowerCase().indexOf(jobFilter) !== -1;
+        if (!skip && match) filtered.push(j);
+      }
+      if (!filtered.length) {
+        fetchBtn.disabled = false;
+        showErr(fetchError, "No matching jobs found. Try clearing the job filter.");
+        return;
+      }
+      setProgress("Found " + filtered.length + " jobs. Fetching artifacts...");
+      fetchArtifactsSeq(host, projectEnc, filtered, token, 0, []);
+    });
+  });
+
+  function fetchArtifactsSeq(host, projectEnc, jobs, token, idx, collected) {
+    if (idx >= jobs.length) {
+      fetchBtn.disabled = false;
+      if (!collected.length) {
+        showErr(fetchError, "No results.json found in any job.");
+        return;
+      }
+      setProgress("Fetched " + collected.length + " files. Parsing...");
+      runParse(collected);
+      setProgress("");
+      return;
+    }
+    var job = jobs[idx];
+    setProgress("Job " + (idx + 1) + "/" + jobs.length + ": " + job.name);
+    var url = host + "/api/v4/projects/" + projectEnc + "/jobs/" + job.id + "/artifacts/results.json";
+    apiFetch(url, token, function(err, json) {
+      // Store job.stage directly — this is the env label (e.g. "env_1", "env_2")
+      if (!err) collected.push({ json: json, stage: job.stage || null });
+      fetchArtifactsSeq(host, projectEnc, jobs, token, idx + 1, collected);
+    });
+  }
+
+  function apiFetch(url, token, cb) {
+    fetch(url, { headers: { "PRIVATE-TOKEN": token } })
+      .then(function(r) {
+        if (!r.ok) throw new Error("HTTP " + r.status);
+        return r.json();
+      })
+      .then(function(data) { cb(null, data); })
+      .catch(function(e)   { cb(e.message, null); });
+  }
+
+  function setProgress(msg) { progressEl.textContent = msg; }
+  function showErr(el, msg) { el.textContent = msg; el.classList.remove("hidden"); }
+
+  // ── merge ──────────────────────────────────────────────────────────────────
+  // Each item now carries a `stage` string (or null for paste mode).
+  // We tag every top-level suite with its stage so processNode can read it.
+  function mergeItems(items) {
+    var merged = {
+      suites: [], errors: [],
+      stats: { startTime: "", duration: 0, expected: 0, skipped: 0, unexpected: 0, flaky: 0 }
+    };
+    var maxDuration = 0;
+    for (var i = 0; i < items.length; i++) {
+      var json   = items[i].json;
+      var stage  = items[i].stage;   // e.g. "env_1" | null
+      var suites = json.suites || [];
+      for (var s = 0; s < suites.length; s++) {
+        suites[s]._stage = stage;
+        merged.suites.push(suites[s]);
+      }
+      var errors = json.errors || [];
+      for (var e = 0; e < errors.length; e++) merged.errors.push(errors[e]);
+      var st = json.stats || {};
+      if ((st.duration || 0) > maxDuration) maxDuration = st.duration || 0;
+      merged.stats.expected   += (st.expected   || 0);
+      merged.stats.skipped    += (st.skipped    || 0);
+      merged.stats.unexpected += (st.unexpected || 0);
+      merged.stats.flaky      += (st.flaky      || 0);
+      if (!merged.stats.startTime && st.startTime) merged.stats.startTime = st.startTime;
+      if (!merged.config) merged.config = json.config;
+    }
+    merged.stats.duration = maxDuration;
+    return merged;
+  }
+
+  // ── parser ─────────────────────────────────────────────────────────────────
+  function runParse(items) {
+    var merged = mergeItems(items);
+    var parsed = parseResults(merged);
+    allRows     = parsed.rows;
+    slowRows    = parsed.top3slow;
+    parsedStats = { totalDuration: parsed.totalDuration, flakyPct: parsed.flakyPct };
+    if (!allRows.length && !slowRows.length) {
+      showErr(pasteError, "No failed, flaky or slow tests found.");
+      return;
+    }
+    activeFilter = "all";
+    renderSummary(parsed);
+    renderFilters();
+    renderTable();
+    renderSlow();
+    renderTSV();
+    var resultsEl = document.getElementById("results");
+    resultsEl.classList.remove("hidden");
+    resultsEl.scrollIntoView({ behavior: "smooth" });
+  }
+
+  function parseResults(json) {
+    var rows   = [];
+    var passed = [];
+    var date   = new Date().toISOString().split("T")[0];
+
+    function processSpec(spec, file, env) {
+      var tests = spec.tests || [];
+      for (var i = 0; i < tests.length; i++) {
+        var test    = tests[i];
+        var results = test.results || [];
+        if (!results.length) continue;
+        var ts = test.status;
+        if (ts === "skipped") continue;
+        var duration = 0;
+        for (var r = 0; r < results.length; r++) duration += (results[r].duration || 0);
+        if (ts === "expected") {
+          passed.push({ date: date, env: env, file: file, title: spec.title, duration: Math.round(duration) });
+          continue;
+        }
+        var last    = results[results.length - 1];
+        var retries = 0;
+        for (var r = 0; r < results.length; r++) { if (results[r].retry > 0) retries++; }
+        var finalStatus  = ts === "flaky" ? "flaky" : (last.status === "timedOut" ? "timedOut" : "failed");
+        var failedResult = last;
+        for (var r = 0; r < results.length; r++) { if (results[r].error) { failedResult = results[r]; break; } }
+        var rawMsg = (failedResult.error && failedResult.error.message) ? failedResult.error.message : "";
+        var error  = rawMsg.replace(/\u001b\[[0-9;]*m/g, "").split("\n")[0].trim().slice(0, 200);
+        rows.push({ date: date, env: env, file: file, title: spec.title, status: finalStatus, retries: retries, duration: Math.round(duration), error: error });
+      }
+    }
+
+    // env is determined once at the top-level suite via _stage, then inherited
+    // by all child nodes. No regex parsing needed.
+    function processNode(node, file, env) {
+      var f = node.file || file || "";
+      // Top-level suites carry _stage; child nodes inherit parent env
+      if (node._stage !== undefined) {
+        env = node._stage || "—";
+      }
+      var specs  = node.specs  || [];
+      var suites = node.suites || [];
+      for (var i = 0; i < specs.length;  i++) processSpec(specs[i], f, env);
+      for (var j = 0; j < suites.length; j++) processNode(suites[j], f, env);
+    }
+
+    var suites = json.suites || [];
+    for (var i = 0; i < suites.length; i++) {
+      processNode(suites[i], suites[i].file || "", "—");
+    }
+
+    passed.sort(function(a, b) { return b.duration - a.duration; });
+    var top3slow = passed.slice(0, 3);
+
+    var st         = json.stats || {};
+    var totalTests = (st.expected || 0) + (st.unexpected || 0) + (st.flaky || 0);
+    var flakyPct   = totalTests > 0 ? (((st.flaky || 0) / totalTests) * 100).toFixed(1) : "0.0";
+
+    return { rows: rows, top3slow: top3slow, totalDuration: Math.round(st.duration || 0), flakyPct: flakyPct };
+  }
+
+  // ── rendering ──────────────────────────────────────────────────────────────
+  function formatDuration(ms) {
+    var s = Math.round(ms / 1000);
+    var m = Math.floor(s / 60);
+    var h = Math.floor(m / 60);
+    if (h > 0) return h + "h " + (m % 60) + "m";
+    if (m > 0) return m + "m " + (s % 60) + "s";
+    return s + "s";
+  }
+
+  function getFiltered() {
+    if (activeFilter === "all") return allRows;
+    var out = [];
+    for (var i = 0; i < allRows.length; i++) {
+      if (allRows[i].status === activeFilter) out.push(allRows[i]);
+    }
+    return out;
+  }
+
+  function countStatus(s) {
+    var n = 0;
+    for (var i = 0; i < allRows.length; i++) { if (allRows[i].status === s) n++; }
+    return n;
+  }
+
+  function renderSummary(parsed) {
+    var stats = [
+      { label: "Total issues", value: allRows.length,           color: "#3b82f6" },
+      { label: "Failed",       value: countStatus("failed"),    color: "#ef4444" },
+      { label: "Flaky",        value: countStatus("flaky"),     color: "#eab308" },
+      { label: "Timed out",    value: countStatus("timedOut"),  color: "#f43f5e" },
+      { label: "Job duration", value: parsed.totalDuration ? formatDuration(parsed.totalDuration) : "—", color: "#8b5cf6" },
+      { label: "Flaky rate",   value: parsed.flakyPct + "%",   color: "#f97316" }
+    ];
+    var html = "";
+    for (var i = 0; i < stats.length; i++) {
+      html += '<div class="stat"><div class="stat-val" style="color:' + stats[i].color + '">' + stats[i].value + '</div><div class="stat-label">' + stats[i].label + '</div></div>';
+    }
+    document.getElementById("summary").innerHTML = html;
+  }
+
+  function renderFilters() {
+    var opts = [
+      { key: "all",      label: "All ("       + allRows.length          + ")" },
+      { key: "failed",   label: "Failed ("    + countStatus("failed")   + ")" },
+      { key: "flaky",    label: "Flaky ("     + countStatus("flaky")    + ")" },
+      { key: "timedOut", label: "Timed out (" + countStatus("timedOut") + ")" }
+    ];
+    var html = "";
+    for (var i = 0; i < opts.length; i++) {
+      html += '<button class="filter-btn' + (opts[i].key === activeFilter ? " active" : "") + '" data-key="' + opts[i].key + '">' + opts[i].label + '</button>';
+    }
+    var f = document.getElementById("filters");
+    f.innerHTML = html;
+    var btns = f.querySelectorAll(".filter-btn");
+    for (var i = 0; i < btns.length; i++) {
+      btns[i].addEventListener("click", function(e) {
+        activeFilter = e.currentTarget.dataset.key;
+        renderFilters();
+        renderTable();
+        renderTSV();
+      });
+    }
+  }
+
+  function esc(s) { return String(s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;"); }
+
+  function renderTable() {
+    var rows = getFiltered();
+    var t = document.getElementById("tbody");
+    if (!rows.length) {
+      t.innerHTML = '<tr><td colspan="8" style="padding:20px;text-align:center;color:#94a3b8">No results for this filter</td></tr>';
+      return;
+    }
+    var html = "";
+    for (var i = 0; i < rows.length; i++) {
+      var r  = rows[i];
+      var bg = i % 2 === 0 ? "" : ' style="background:#f8fafc"';
+      html += '<tr' + bg + '>'
+        + '<td class="muted" style="white-space:nowrap">'                                                                                          + esc(r.date)                   + '</td>'
+        + '<td class="env-tag">'                                                                                                                   + esc(r.env || "—")             + '</td>'
+        + '<td class="muted" style="max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="' + esc(r.file) + '">'      + esc(r.file.split("/").pop())  + '</td>'
+        + '<td style="max-width:240px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="' + esc(r.title) + '">'                   + esc(r.title)                  + '</td>'
+        + '<td><span class="badge badge-' + r.status + '">' + r.status + '</span></td>'
+        + '<td style="text-align:center">'                                                                                                         + r.retries                     + '</td>'
+        + '<td class="muted" style="white-space:nowrap">'                                                                                          + r.duration + "ms"             + '</td>'
+        + '<td style="max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-family:monospace;font-size:11px;color:#94a3b8" title="' + esc(r.error||"") + '">' + esc(r.error || "") + '</td>'
+        + '</tr>';
+    }
+    t.innerHTML = html;
+  }
+
+  function renderSlow() {
+    var sec = document.getElementById("slowSection");
+    if (!slowRows.length) { sec.classList.add("hidden"); return; }
+    sec.classList.remove("hidden");
+    var rows = "";
+    for (var i = 0; i < slowRows.length; i++) {
+      var r  = slowRows[i];
+      var bg = i % 2 === 0 ? "#fff" : "#f8fafc";
+      rows += '<tr style="background:' + bg + '">'
+        + '<td style="padding:7px 12px;border-bottom:1px solid #f1f5f9;font-weight:700;color:#f59e0b">' + (i + 1) + '</td>'
+        + '<td style="padding:7px 12px;border-bottom:1px solid #f1f5f9" class="env-tag">'               + esc(r.env || "—") + '</td>'
+        + '<td style="padding:7px 12px;border-bottom:1px solid #f1f5f9;color:#64748b;max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="' + esc(r.file) + '">' + esc(r.file.split("/").pop()) + '</td>'
+        + '<td style="padding:7px 12px;border-bottom:1px solid #f1f5f9;max-width:300px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="' + esc(r.title) + '">' + esc(r.title) + '</td>'
+        + '<td style="padding:7px 12px;border-bottom:1px solid #f1f5f9;font-weight:600">' + (r.duration / 1000).toFixed(1) + "s" + '</td>'
+        + '</tr>';
+    }
+    sec.innerHTML = '<h2>Top 3 Slowest Passing Tests</h2>'
+      + '<div class="table-wrap"><table>'
+      + '<thead><tr style="background:#f1f5f9">'
+      + '<th style="padding:8px 12px;border-bottom:1.5px solid #e2e8f0">#</th>'
+      + '<th style="padding:8px 12px;border-bottom:1.5px solid #e2e8f0">Env</th>'
+      + '<th style="padding:8px 12px;border-bottom:1.5px solid #e2e8f0">File</th>'
+      + '<th style="padding:8px 12px;border-bottom:1.5px solid #e2e8f0">Test Name</th>'
+      + '<th style="padding:8px 12px;border-bottom:1.5px solid #e2e8f0">Duration</th>'
+      + '</tr></thead><tbody>' + rows + '</tbody></table></div>';
+  }
+
+  function renderTSV() {
+    var lines    = [];
+    var filtered = getFiltered();
+    for (var i = 0; i < filtered.length; i++) {
+      var r = filtered[i];
+      lines.push([r.date, r.env, r.file, r.title, r.status, r.retries, r.duration, r.error || ""].join("\t"));
+    }
+    for (var i = 0; i < slowRows.length; i++) {
+      var r = slowRows[i];
+      lines.push([r.date, r.env, r.file, r.title, "slow", 0, r.duration, ""].join("\t"));
+    }
+    var dur = parsedStats.totalDuration ? formatDuration(parsedStats.totalDuration) : "—";
+    var pct = parsedStats.flakyPct !== undefined ? parsedStats.flakyPct + "%" : "—";
+    var date = new Date().toISOString().split("T")[0];
+    lines.push([date, "", "", "", "summary", "", dur, pct].join("\t"));
+    document.getElementById("tsvOut").value = lines.join("\n");
+  }
+
+})();
+</script>
+</body>
+</html>

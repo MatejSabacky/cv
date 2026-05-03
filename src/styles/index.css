@@ -1,0 +1,100 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  html {
+    scroll-behavior: smooth;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  body {
+    @apply font-sans bg-cream-50 text-warm-900 dark:bg-warm-950 dark:text-cream-100;
+    background-image:
+      radial-gradient(at 15% 0%, rgba(99, 102, 241, 0.08) 0px, transparent 50%),
+      radial-gradient(at 85% 100%, rgba(129, 140, 248, 0.06) 0px, transparent 50%);
+    background-attachment: fixed;
+  }
+
+  .dark body {
+    background-image:
+      radial-gradient(at 15% 0%, rgba(99, 102, 241, 0.12) 0px, transparent 50%),
+      radial-gradient(at 85% 100%, rgba(67, 56, 202, 0.15) 0px, transparent 50%);
+  }
+
+  ::selection {
+    @apply bg-accent-200 text-warm-900;
+  }
+
+  .dark ::selection {
+    @apply bg-accent-700 text-cream-50;
+  }
+}
+
+@layer components {
+  .container-prose {
+    @apply max-w-3xl mx-auto px-6 sm:px-8;
+  }
+
+  .container-wide {
+    @apply max-w-5xl mx-auto px-6 sm:px-8;
+  }
+
+  /* Subtle paper-grain texture for warmth */
+  .grain-overlay::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    pointer-events: none;
+    z-index: 1;
+    opacity: 0.4;
+    background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 0.2 0 0 0 0 0.22 0 0 0 0 0.45 0 0 0 0.03 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+  }
+
+  .prose-warm {
+    @apply max-w-none;
+  }
+  .prose-warm h1 {
+    @apply font-display text-4xl sm:text-5xl font-medium tracking-tight mt-0 mb-6 text-warm-900 dark:text-cream-50;
+  }
+  .prose-warm h2 {
+    @apply font-display text-2xl sm:text-3xl font-medium mt-12 mb-4 text-warm-900 dark:text-cream-50;
+  }
+  .prose-warm h3 {
+    @apply font-display text-xl sm:text-2xl font-medium mt-8 mb-3 text-warm-800 dark:text-cream-100;
+  }
+  .prose-warm p {
+    @apply text-warm-700 dark:text-cream-200 leading-relaxed mb-5 text-[1.0625rem];
+  }
+  .prose-warm a {
+    @apply text-accent-600 dark:text-accent-300 underline decoration-accent-300/50 underline-offset-4 hover:decoration-accent-500 transition-colors;
+  }
+  .prose-warm ul {
+    @apply list-disc pl-6 mb-5 space-y-2 text-warm-700 dark:text-cream-200;
+  }
+  .prose-warm ol {
+    @apply list-decimal pl-6 mb-5 space-y-2 text-warm-700 dark:text-cream-200;
+  }
+  .prose-warm li {
+    @apply leading-relaxed;
+  }
+  .prose-warm code {
+    @apply font-mono text-sm bg-warm-100 dark:bg-warm-800 text-accent-700 dark:text-accent-200 px-1.5 py-0.5 rounded;
+  }
+  .prose-warm pre {
+    @apply bg-warm-900 dark:bg-warm-950 text-cream-100 p-5 rounded-lg overflow-x-auto my-6 text-sm font-mono border border-warm-200 dark:border-warm-800;
+  }
+  .prose-warm pre code {
+    @apply bg-transparent text-cream-100 p-0;
+  }
+  .prose-warm blockquote {
+    @apply border-l-4 border-accent-300 dark:border-accent-600 pl-5 italic text-warm-600 dark:text-cream-300 my-6;
+  }
+  .prose-warm hr {
+    @apply border-warm-200 dark:border-warm-800 my-10;
+  }
+  .prose-warm strong {
+    @apply text-warm-900 dark:text-cream-50 font-semibold;
+  }
+}
